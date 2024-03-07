@@ -116,4 +116,52 @@ export default abstract class FileProcessor {
     
         currentLevel[keyParts[keyParts.length - 1]] = value;
     }
+
+    protected transformTextForI18nOnRuby(originalText: string): { transformedText: string, variablesMap: Map<string, string> } {
+        let transformedText = originalText;
+        const variablesMap = new Map<string, string>();
+    
+        // Detecta variables normales
+        transformedText = transformedText.replace(/#\{([a-z_][^\}]+)\}/g, (_, variableName) => {
+            variablesMap.set(variableName, variableName);
+            return `%{${variableName}}`;
+        });
+    
+        // Detecta clases ej: Foo.human_attribute_name(:bar)
+        const classMethodPattern = /#\{([A-Z][\w:]*\w+)\.([a-zA-Z_]+)\(([^\}]*)\)\}/g;
+        transformedText = transformedText.replace(classMethodPattern, (_, classPath, methodName, methodArgs) => {
+            const classPathSlug = classPath.replace(/::/g, "_").toLowerCase();
+            const slug = `${classPathSlug}_${methodName}`;
+            const originalExpression = methodArgs ? `${classPath}.${methodName}(${methodArgs})` : `${classPath}.${methodName}()`;
+            variablesMap.set(slug, originalExpression);
+            return `%{${slug}}`;
+        });
+
+        // agregar mas casos acá
+    
+        return { transformedText, variablesMap };
+    }
+
+    protected buildI18nCall(i18nKey: string, variablesMap: Map<string, string>): string {
+        const i18nArguments = Array.from(variablesMap.entries()).map(([slug, originalExpression]) => {
+            if (originalExpression.includes('.')) {
+                return `${slug}: ${originalExpression}`; // Para expresiones de clase
+            } else {
+                return `${slug}: ${slug}`; // Para variables dejamos igual
+            }
+        }).join(", ");
+    
+        const replacementText = variablesMap.size > 0 ? `I18n.t('${i18nKey}', ${i18nArguments})` : `I18n.t('${i18nKey}')`;
+
+        return replacementText;
+    }
+
+    protected removeSurroundingQuotes(value: string): string {
+        if ((value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))) {
+            return value.substring(1, value.length - 1);
+        } else {
+            return value;
+        }
+    }  
 }

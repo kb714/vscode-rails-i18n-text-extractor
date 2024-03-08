@@ -69,28 +69,27 @@ export default class ERBFileProcessor extends FileProcessor {
         let transformedText = originalText;
         const variablesMap = new Map<string, string>();
     
-        // para variables normales tipo <%= variable %>
-        const rubyVariablePattern = /<%=?\s*([a-zA-Z_][\w.]*)\s*%>/g;
-        transformedText = transformedText.replace(rubyVariablePattern, (_, variableName) => {
-            if (!variablesMap.has(variableName)) {
-                variablesMap.set(variableName, variableName);
+        const erbPattern = /<%=?\s*([^%]+?)\s*%>/g;
+        transformedText = transformedText.replace(erbPattern, (_, expression) => {
+            expression = expression.trim();
+    
+            const isSimpleVariable = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expression);
+    
+            let slug = expression;
+            if (!isSimpleVariable) {
+                slug = expression
+                    .replace(/\([^)]*\)/g, '')
+                    .replace(/\[[^\]]*\]/g, '')
+                    .replace(/[^a-zA-Z0-9_]/g, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^_+|_+$/g, '')
+                    .toLowerCase();
             }
-
-            return `%{${variableName}}`;
-        });
-
-        // para clases tipo <%= Foo.human_attribute_name(:bar) %>
-        const classMethodPattern = /(?:<%=\s*|\#\{)([A-Z][\w:]*\w+)\.([a-zA-Z_]+)\(([^\}]*)\)(?:\s*%>|\})/g;
-        transformedText = transformedText.replace(classMethodPattern, (_, classPath, methodName, methodArgs) => {
-            const classPathSlug = classPath.replace(/::/g, "_").toLowerCase();
-            const slug = `${classPathSlug}_${methodName}`;
-            const originalExpression = methodArgs ? `${classPath}.${methodName}(${methodArgs})` : `${classPath}.${methodName}()`;
-            variablesMap.set(slug, originalExpression);
+    
+            variablesMap.set(slug, expression);
             return `%{${slug}}`;
         });
-
-        // acá ir agregando mas casos
     
         return { transformedText, variablesMap };
-    }      
+    }    
 }

@@ -121,23 +121,26 @@ export default abstract class FileProcessor {
         let transformedText = originalText;
         const variablesMap = new Map<string, string>();
     
-        // Detecta variables normales
-        transformedText = transformedText.replace(/#\{([a-z_][^\}]+)\}/g, (_, variableName) => {
-            variablesMap.set(variableName, variableName);
-            return `%{${variableName}}`;
-        });
+        const interpolationPattern = /#\{([^}]+)\}/g;
+        transformedText = transformedText.replace(interpolationPattern, (_, fullExpression) => {
+            fullExpression = fullExpression.trim();
+
+            const isSimpleVariable = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(fullExpression);
     
-        // Detecta clases ej: Foo.human_attribute_name(:bar)
-        const classMethodPattern = /#\{([A-Z][\w:]*\w+)\.([a-zA-Z_]+)\(([^\}]*)\)\}/g;
-        transformedText = transformedText.replace(classMethodPattern, (_, classPath, methodName, methodArgs) => {
-            const classPathSlug = classPath.replace(/::/g, "_").toLowerCase();
-            const slug = `${classPathSlug}_${methodName}`;
-            const originalExpression = methodArgs ? `${classPath}.${methodName}(${methodArgs})` : `${classPath}.${methodName}()`;
-            variablesMap.set(slug, originalExpression);
+            let slug = fullExpression;
+            if (!isSimpleVariable) {
+                slug = fullExpression
+                .replace(/\([^)]*\)/g, '')
+                .replace(/\[[^\]]*\]/g, '')
+                .replace(/[^a-zA-Z0-9_]/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_+|_+$/g, '')
+                .toLowerCase()
+            }
+    
+            variablesMap.set(slug, fullExpression);
             return `%{${slug}}`;
         });
-
-        // agregar mas casos acá
     
         return { transformedText, variablesMap };
     }

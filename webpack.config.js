@@ -3,7 +3,7 @@
 'use strict';
 
 const path = require('path');
-
+const CopyPlugin = require('copy-webpack-plugin');
 //@ts-check
 /** @typedef {import('webpack').Configuration} WebpackConfig **/
 
@@ -37,6 +37,14 @@ const extensionConfig = {
             loader: 'ts-loader'
           }
         ]
+      },
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader'],
+      },
+      {
+        test: /\.(png|svg|jpg|jpeg|gif)$/i,
+        type: 'asset/resource',
       }
     ]
   },
@@ -44,5 +52,14 @@ const extensionConfig = {
   infrastructureLogging: {
     level: "log", // enables logging required for problem matchers
   },
+  plugins: [
+    new CopyPlugin({
+      patterns: [
+        { from: 'node_modules/@vscode/webview-ui-toolkit/dist/toolkit.js', to: 'toolkit.js' },
+        { from: 'node_modules/@vscode/codicons/dist/codicon.css', to: 'codicon.css' },
+        { from: 'node_modules/@vscode/codicons/dist/codicon.ttf', to: 'codicon.ttf' }
+      ],
+    }),
+  ]
 };
 module.exports = [ extensionConfig ];

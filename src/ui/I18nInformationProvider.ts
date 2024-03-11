@@ -91,8 +91,8 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 	}
 
 	private getHtmlForWebview(showProgress: boolean, rows: string) {
-		const toolkitUri = this.webviewView?.webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'node_modules', '@vscode', 'webview-ui-toolkit', 'dist', 'toolkit.js'));
-		const codiconsUri = this.webviewView?.webview?.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.css'));
+		const toolkitUri = this.webviewView?.webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'dist', 'toolkit.js'));
+		const codiconsUri = this.webviewView?.webview.asWebviewUri(vscode.Uri.joinPath(this._context.extensionUri, 'dist', 'codicon.css'));
 		let bodyContent = showProgress ?
 			`<div style="display: flex; justify-content: center; align-items: center; height: 100%; margin-top: 20px">
 					<vscode-progress-ring></vscode-progress-ring>

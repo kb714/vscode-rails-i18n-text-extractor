@@ -2,7 +2,7 @@
   "name": "rails-i18n-text-extractor",
   "displayName": "rails-i18n-text-extractor",
   "description": "Rails I18n Extractor is a VSCode extension designed to assist in the internationalization of Ruby on Rails projects.",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "engines": {
     "vscode": "^1.87.0"
   },
@@ -100,6 +100,7 @@
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
     "@vscode/test-electron": "^2.3.0",
+    "copy-webpack-plugin": "^12.0.2",
     "eslint": "^8.26.0",
     "glob": "^7.1.4",
     "minimatch": "5.1.2",

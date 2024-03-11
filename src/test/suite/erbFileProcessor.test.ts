@@ -15,7 +15,7 @@ suite('ERBFileProcessor', () => {
     setup(() => {
         const document = { uri: vscode.Uri.parse('file.erb'), getText: () => '' } as unknown as vscode.TextDocument;
         mockEditor = { document } as unknown as vscode.TextEditor;
-        processor = new TestableERBFileProcessor(mockEditor, "input_key");
+        processor = new TestableERBFileProcessor(mockEditor);
     });
     
     test('should extract common variables', async () => {

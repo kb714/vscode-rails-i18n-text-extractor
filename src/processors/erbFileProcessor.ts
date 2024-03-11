@@ -1,45 +1,63 @@
 import * as vscode from 'vscode';
 import FileProcessor from './fileProcessor';
+import I18nFinder from '../utils/i18nFinder';
+import UserInput from '../utils/userInput';
 
 export default class ERBFileProcessor extends FileProcessor {
+    private i18nFinder : I18nFinder;
 
-    constructor(editor: vscode.TextEditor, userInput: string) {
-        super(editor, userInput);
+    constructor(editor: vscode.TextEditor) {
+        super(editor);
+        this.i18nFinder = new I18nFinder();
     }
 
     async processText(): Promise<void> {
         const selectionRange = new vscode.Range(this.editor.selection.start, this.editor.selection.end);
         const selectedText = this.editor.document.getText(selectionRange);
 
-        const i18nTranslationPath = this.buildI18nPath();
         const yamlPath = this.buildYamlPath();
-
         const isWithinERBTags = this.isWithinERBTags(selectionRange);
-        
-        let textToYaml;
-        let finalReplacementText;
+        const { transformedText, variablesMap } = this.transformTextForI18n(selectedText, isWithinERBTags);
+        const existingKey = this.i18nFinder.keyForText(transformedText);
+
+        let i18nKey;
+
+        if (existingKey) {
+            i18nKey = existingKey;
+        } else {
+            const userInput = await UserInput.requestYmlKey();
+            if (userInput) {
+                i18nKey = this.buildI18nPath(userInput);
+            } else {
+                return;
+            }
+        }
 
         // Determinamos si el texto está en un bloque ruby
         // si hay mas casos aquí tendremos que agregarlos
+        let textToFile;
+        const replacementText = this.buildI18nCall(i18nKey, variablesMap);
         if (isWithinERBTags) {
-            // Dentro de <%= %>, básicamente lo tratamos como si fuera un archivo ruby
-            const { transformedText, variablesMap } = this.transformTextForI18nOnRuby(selectedText);
-            textToYaml = this.removeSurroundingQuotes(transformedText);
-            const replacementText = this.buildI18nCall(i18nTranslationPath, variablesMap);
-
-            finalReplacementText = replacementText;
+            textToFile = replacementText;
         } else {
-            // Texto plano, necesita ser envuelto en <%= %>
-            const { transformedText, variablesMap } = this.transformTextForI18nOnHTML(selectedText);
-            textToYaml = transformedText;
-            const replacementText = this.buildI18nCall(i18nTranslationPath, variablesMap);
-
-            finalReplacementText = `<%= ${replacementText} %>`;
+            textToFile = `<%= ${replacementText} %>`;
         }
 
-        this.replaceSelectedText(finalReplacementText);
+        if (!existingKey) { 
+            await this.updateOrCreateYaml(yamlPath, i18nKey, transformedText);
+        }
 
-        await this.updateOrCreateYaml(yamlPath, i18nTranslationPath, textToYaml);
+        this.replaceSelectedText(textToFile);
+    }
+
+    private transformTextForI18n(originalText: string, isWithinERBTags: boolean): { transformedText: string, variablesMap: Map<string, string> } {
+        if (isWithinERBTags) {
+            const { transformedText, variablesMap } = this.transformTextForI18nOnRuby(originalText);
+            const cleanedText = this.removeSurroundingQuotes(transformedText);
+            return { transformedText: cleanedText, variablesMap };
+        } else {
+            return this.transformTextForI18nOnHTML(originalText);
+        }
     }
 
     private isWithinERBTags(selectionRange: vscode.Range): boolean {
@@ -63,33 +81,5 @@ export default class ERBFileProcessor extends FileProcessor {
         // la selección esta dentro de un bloque Ruby
         // acepto sugerencias ~(˘▾˘~)
         return lastOpeningTagIndex > lastClosingTagIndex;
-    }
-
-    protected transformTextForI18nOnHTML(originalText: string): { transformedText: string, variablesMap: Map<string, string> } {
-        let transformedText = originalText;
-        const variablesMap = new Map<string, string>();
-    
-        const erbPattern = /<%=?\s*([^%]+?)\s*%>/g;
-        transformedText = transformedText.replace(erbPattern, (_, expression) => {
-            expression = expression.trim();
-    
-            const isSimpleVariable = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expression);
-    
-            let slug = expression;
-            if (!isSimpleVariable) {
-                slug = expression
-                    .replace(/\([^)]*\)/g, '')
-                    .replace(/\[[^\]]*\]/g, '')
-                    .replace(/[^a-zA-Z0-9_]/g, '_')
-                    .replace(/_+/g, '_')
-                    .replace(/^_+|_+$/g, '')
-                    .toLowerCase();
-            }
-    
-            variablesMap.set(slug, expression);
-            return `%{${slug}}`;
-        });
-    
-        return { transformedText, variablesMap };
     }    
 }

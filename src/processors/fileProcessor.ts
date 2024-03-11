@@ -3,13 +3,11 @@ import * as yaml from 'js-yaml';
 
 export default abstract class FileProcessor {
     protected editor: vscode.TextEditor;
-    protected userInput: string;
     protected filePath: string;
     protected selectedText: string;
 
-    constructor(editor: vscode.TextEditor, userInput: string) {
+    constructor(editor: vscode.TextEditor) {
         this.editor = editor;
-        this.userInput = userInput;
         this.filePath = editor.document.uri.fsPath;
         this.selectedText = editor.document.getText(editor.selection);
     }
@@ -22,7 +20,7 @@ export default abstract class FileProcessor {
         });
     }
 
-    protected buildI18nPath(): string {
+    protected buildI18nPath(userInput: string): string {
         const searchString = "/app/";
         const appIndex = this.filePath.indexOf(searchString);
         // Sacamos la parte de la ruta desde "app" en adelante y eliminamos la extensión del archivo
@@ -32,7 +30,7 @@ export default abstract class FileProcessor {
         // Armamos el path con puntos
         const translationPath = relevantPath.replace(/\//g, '.');
     
-        return `${translationPath}.${this.userInput}`;
+        return `${translationPath}.${userInput}`;
     }
 
     protected buildYamlPath(): string {
@@ -139,6 +137,34 @@ export default abstract class FileProcessor {
             }
     
             variablesMap.set(slug, fullExpression);
+            return `%{${slug}}`;
+        });
+    
+        return { transformedText, variablesMap };
+    }
+
+    protected transformTextForI18nOnHTML(originalText: string): { transformedText: string, variablesMap: Map<string, string> } {
+        let transformedText = originalText;
+        const variablesMap = new Map<string, string>();
+    
+        const erbPattern = /<%=?\s*([^%]+?)\s*%>/g;
+        transformedText = transformedText.replace(erbPattern, (_, expression) => {
+            expression = expression.trim();
+    
+            const isSimpleVariable = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(expression);
+    
+            let slug = expression;
+            if (!isSimpleVariable) {
+                slug = expression
+                    .replace(/\([^)]*\)/g, '')
+                    .replace(/\[[^\]]*\]/g, '')
+                    .replace(/[^a-zA-Z0-9_]/g, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^_+|_+$/g, '')
+                    .toLowerCase();
+            }
+    
+            variablesMap.set(slug, expression);
             return `%{${slug}}`;
         });
     

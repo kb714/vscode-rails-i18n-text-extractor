@@ -1,42 +1,48 @@
 import * as vscode from 'vscode';
 import FileProcessorFactory from './fileProcessorFactory';
+import I18nInformationProvider from './ui/I18nInformationProvider';
+import YamlFiles from './ui/yamlFiles';
 
 export function activate(context: vscode.ExtensionContext) {
+	const yamlManager = new YamlFiles(context);
+
 	let disposable = vscode.commands.registerCommand('extension.extract', async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) {
 			// no sé en que casos puede pasar esto, pero otras extensiones hacen lo mismo
-            vscode.window.showInformationMessage('No hay editor activo');
-            return;
-        }
+			vscode.window.showInformationMessage('No active editor');
+			return;
+		}
 
 		const filePath = editor.document.uri.fsPath;
 		const parts = filePath.split('.');
 		const fileExtension = parts[parts.length - 1];
 
-        // Pedimos la clave ... podríamos generar una automaticamente, pero quedaría no bueno
-		const userInput = await vscode.window.showInputBox({
-			placeHolder: "Clave para yml",
-			prompt: "Escribe la Clave que se usará para la extracción, sin espacios ni puntuación",
-			validateInput: text => {
-				return text.trim().length === 0 ? 'Debes ingresar una clave' : null;
-			}
-		});
+		const processor = FileProcessorFactory.getProcessor(editor, fileExtension);
 
-		if (userInput) {
-			const processor = FileProcessorFactory.getProcessor(editor, userInput, fileExtension);
-
-            if (processor) {
-                processor.processText();
-                vscode.window.showInformationMessage(`Texto procesado para ${fileExtension}`);
-            } else {
-                vscode.window.showInformationMessage('Tipo de archivo no soportado para extracción');
-            }
-
+		if (processor) {
+			processor.processText();
+			vscode.window.showInformationMessage(`Text processed for ${fileExtension}`);
+		} else {
+			vscode.window.showInformationMessage('File type not supported for extraction');
 		}
-    });
+	});
 
-    context.subscriptions.push(disposable);
+    const provider = new I18nInformationProvider(yamlManager, context);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider('i18nInformationWebView', provider));
+
+    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => provider.updateWebview()));
+    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => {
+        if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
+            provider.updateWebview();
+        }
+    }));
+	let refreshCmd = vscode.commands.registerCommand('i18nInformation.refresh', () => {
+		provider.yamlManager.refresh();
+		provider.updateWebview();
+	  });
+
+	context.subscriptions.push(disposable, refreshCmd);
 }
 
-export function deactivate() {}
+export function deactivate() { }

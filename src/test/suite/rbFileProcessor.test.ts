@@ -15,7 +15,7 @@ suite('RubyFileProcessor', () => {
     setup(() => {
         const document = { uri: vscode.Uri.parse('file.rb'), getText: () => '' } as unknown as vscode.TextDocument;
         mockEditor = { document } as unknown as vscode.TextEditor;
-        processor = new TestableRubyFileProcessor(mockEditor, "input_key");
+        processor = new TestableRubyFileProcessor(mockEditor);
     });
 
     test('should extract simple variables', async () => {

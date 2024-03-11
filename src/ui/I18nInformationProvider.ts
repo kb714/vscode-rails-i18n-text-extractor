@@ -67,7 +67,13 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 	private async generateTableRows(keys: { key: string; position: vscode.Position }[]): Promise<string> {
 		const rowsPromises = keys.map(async ({ key, position }) => {
 			const fullKey = "es.".concat(key);
-			const value = await this.yamlManager.findKey(fullKey) || '<span style="color: var(--vscode-editorOverviewRuler-warningForeground)">not found</span>';
+			const unscapedValue = await this.yamlManager.findKey(fullKey)
+			let value;
+			if(unscapedValue) {
+				value = this.escapeHtml(unscapedValue)
+			} else {
+				value = '<span style="color: var(--vscode-editorOverviewRuler-warningForeground)">not found</span>';
+			}
 			const positionString = JSON.stringify({ line: position.line, character: position.character });
 			return `<vscode-data-grid-row>
 				<vscode-data-grid-cell grid-column="1">${key}</vscode-data-grid-cell>
@@ -118,4 +124,13 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 		</body>
 		</html>`;
 	}
+
+	private escapeHtml(value: string) {
+		return value
+		  .replace(/&/g, "&amp;")
+		  .replace(/</g, "&lt;")
+		  .replace(/>/g, "&gt;")
+		  .replace(/"/g, "&quot;")
+		  .replace(/'/g, "&#39;");
+	  }
 }

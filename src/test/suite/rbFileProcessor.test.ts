@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as assert from 'assert';
-import RubyFileProcessor from '../../processors/rubyFileProcessor';
+import RubyFileProcessor from '../../main/processors/rubyFileProcessor';
 
 suite('RubyFileProcessor', () => {
     class TestableRubyFileProcessor extends RubyFileProcessor {

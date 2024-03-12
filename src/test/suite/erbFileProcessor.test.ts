@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as assert from 'assert';
-import ERBFileProcessor from '../../processors/erbFileProcessor';
+import ERBFileProcessor from '../../main/processors/erbFileProcessor';
 
 suite('ERBFileProcessor', () => {
     class TestableERBFileProcessor extends ERBFileProcessor {

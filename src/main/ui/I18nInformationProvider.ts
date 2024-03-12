@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-
-
+import * as fs from 'fs';
+import * as readline from 'readline';
 
 export default class I18nInformationProvider implements vscode.WebviewViewProvider {
 	constructor(public yamlManager: any, context: vscode.ExtensionContext) {
@@ -16,14 +16,30 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 		webviewView.webview.onDidReceiveMessage(async (message) => {
 			if (message.command === 'goToDefinition') {
 				const { position } = message;
-				if (vscode.window.activeTextEditor) {
-					const editor = vscode.window.activeTextEditor;
-					// esto lo podemos hacer dinamico, 6 para que el cursos quede en la t de I18n.t
-					const newPosition = new vscode.Position(position.line, position.character + 6);
-					const newSelection = new vscode.Selection(newPosition, newPosition);
-					editor.selection = newSelection;
-					await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
-					editor.revealRange(newSelection, vscode.TextEditorRevealType.InCenter);
+
+				const document = await vscode.workspace.openTextDocument(position.filePath);
+				const editor = await vscode.window.showTextDocument(document, { preview: false });
+				
+				const newPosition = new vscode.Position(position.line, position.character + 6); // Ajustar según necesidad
+				const newSelection = new vscode.Selection(newPosition, newPosition);
+				
+				editor.selection = newSelection;
+				await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+				editor.revealRange(newSelection, vscode.TextEditorRevealType.InCenter);
+			}
+
+			if (message.command === 'goToYml') {
+				const { position } = message;
+				const line = await this.findLineOfKeyInYaml(position.filePath, position.fullKey);
+				const openPath = vscode.Uri.file(position.filePath);
+				const document = await vscode.workspace.openTextDocument(openPath);
+				const editor = await vscode.window.showTextDocument(document, { preview: false });
+			
+				// movemos el raton al final de la linea y centramos
+				if (line >= 0) {
+					const linePosition = document.lineAt(line).range.end;
+					editor.selection = new vscode.Selection(linePosition, linePosition);
+					editor.revealRange(new vscode.Range(linePosition, linePosition), vscode.TextEditorRevealType.InCenter);
 				}
 			}
 		}, undefined, this._context.subscriptions);
@@ -38,7 +54,8 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 				this.webviewView.webview.html = this.getHtmlForWebview(true, "");
 				await this.yamlManager.waitForLoad();
 				const keys = this.extractI18nKeys(editor.document);
-				const tableRows = await this.generateTableRows(keys);
+				const filePath = editor.document.uri.fsPath;
+				const tableRows = await this.generateTableRows(keys, filePath);
 				this.webviewView.webview.html = this.getHtmlForWebview(false, tableRows);
 			} else {
 				this.webviewView.webview.html = this.getHtmlForWebview(false, "");
@@ -64,23 +81,31 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 		return keysWithPosition;
 	}
 
-	private async generateTableRows(keys: { key: string; position: vscode.Position }[]): Promise<string> {
+	private async generateTableRows(keys: { key: string; position: vscode.Position }[], filePath: string): Promise<string> {
 		const rowsPromises = keys.map(async ({ key, position }) => {
 			const fullKey = "es.".concat(key);
-			const unscapedValue = await this.yamlManager.findKey(fullKey)
+			const ymlData = await this.yamlManager.findDataFromKey(fullKey)
 			let value;
-			if(unscapedValue) {
-				value = this.escapeHtml(unscapedValue)
+			let goToYmlHTML;
+			if(ymlData) {
+				value = this.escapeHtml(ymlData.value)
+				const positionYml = JSON.stringify({ filePath: ymlData.filePath, fullKey: fullKey });
+				goToYmlHTML = `
+					<vscode-button appearance="icon" onclick="goToYml('${positionYml.replace(/"/g, '&quot;')}')">
+						<i class="codicon codicon-code"></i>
+					</vscode-button>
+				`;
 			} else {
 				value = '<span style="color: var(--vscode-editorOverviewRuler-warningForeground)">not found</span>';
 			}
-			const positionString = JSON.stringify({ line: position.line, character: position.character });
+			const positionString = JSON.stringify({ line: position.line, character: position.character, filePath: filePath });
 			return `<vscode-data-grid-row>
 				<vscode-data-grid-cell grid-column="1">${key}</vscode-data-grid-cell>
 				<vscode-data-grid-cell grid-column="2">${value}</vscode-data-grid-cell>
 				<vscode-data-grid-cell grid-column="3">
+					${goToYmlHTML}
 					<vscode-button appearance="icon" onclick="goToDefinition('${positionString.replace(/"/g, '&quot;')}')">
-						<i class="codicon codicon-code"></i>
+						<i class="codicon codicon-go-to-file"></i>
 					</vscode-button>
 				</vscode-data-grid-cell>
 			</vscode-data-grid-row>`;
@@ -120,6 +145,11 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 					const position = JSON.parse(positionString);
 					vscode.postMessage({ command: 'goToDefinition', position });
 				}
+
+				function goToYml(positionYml) {
+					const position = JSON.parse(positionYml);
+					vscode.postMessage({ command: 'goToYml', position });
+				}
 			</script>
 		</body>
 		</html>`;
@@ -133,4 +163,51 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 		  .replace(/"/g, "&quot;")
 		  .replace(/'/g, "&#39;");
 	  }
+
+	  private async findLineOfKeyInYaml(filePath: string, keyPath: string): Promise<number> {
+		// Como no sabemos siempre como se identan las lineas, basicamente lo que hacemos
+		// es buscar la primera anidación y contar las lineas que hay entre
+		// ella, y la siguiente clave, esa distancia será la separación que define
+		// los espacios, acepto mejores soluciones <.<
+        const fileStream = fs.createReadStream(filePath);
+      
+        const rl = readline.createInterface({
+          input: fileStream,
+          crlfDelay: Infinity
+        });
+
+        const keyParts = keyPath.split('.');
+        let currentDepth = 0;
+        let lastIndent = 0;
+        let lineIndex = 0;
+        let line = "";
+      
+        for await (line of rl) {
+          const trimmedLine = line.trim();
+          if (trimmedLine === '') {
+            lineIndex++;
+            continue; // por lineas vacías
+          }
+      
+          const matchResult = line.match(/^(\s*)/);
+            const currentLineIndent = matchResult ? matchResult[0].length : 0;
+          
+          if (currentLineIndent <= lastIndent && currentDepth > 0) {
+            currentDepth--;
+            lastIndent = currentLineIndent;
+          }
+      
+          if (currentDepth < keyParts.length && trimmedLine.startsWith(keyParts[currentDepth])) {
+            lastIndent = currentLineIndent;
+            if (currentDepth === keyParts.length - 1) {
+              // Encontramos la clave completa.
+              return lineIndex;
+            }
+            currentDepth++;
+          }
+          lineIndex++;
+        }
+      
+        return -1; // nunca debería pasar que no la encontramos
+      }
 }

@@ -2,15 +2,20 @@ import * as vscode from 'vscode';
 import * as yaml from 'js-yaml';
 import * as path from 'path';
 
+interface I18nValueDetail {
+    value: string;
+    filePath: string;
+}
+
 export default class YamlFiles {
-    private i18nValues: Map<string, string> = new Map();
+    private i18nValues: Map<string, I18nValueDetail> = new Map();
     private isLoaded = false;
 
     constructor(private _: vscode.ExtensionContext) {
         this.loadI18nFiles();
     }
 
-    async findKey(key: string): Promise<string | undefined> {
+    async findDataFromKey(key: string): Promise<I18nValueDetail | undefined> {
         return this.i18nValues.get(key);
     }
 
@@ -64,20 +69,20 @@ export default class YamlFiles {
             const uri = vscode.Uri.file(filePath);
             const fileContent = await vscode.workspace.fs.readFile(uri);
             const content = yaml.load(fileContent.toString());
-            this.parseYamlContent('', content);
+            this.parseYamlContent('', content, filePath);
         } catch (e) {
             console.error(`Error parsing YAML file: ${filePath}`, e);
         }
     }
 
-    private parseYamlContent(prefix: string, content: any) {
+    private async parseYamlContent(prefix: string, content: any, filePath: string): Promise<void> {
         if (typeof content === 'object' && content !== null) {
-            Object.entries(content).forEach(([key, value]) => {
+            for (const [key, value] of Object.entries(content)) { // Cambio aquí
                 const newPrefix = prefix ? `${prefix}.${key}` : key;
-                this.parseYamlContent(newPrefix, value);
-            });
+                await this.parseYamlContent(newPrefix, value, filePath); // Ahora espera correctamente
+            }
         } else if (typeof content === 'string') {
-            this.i18nValues.set(prefix, content);
+            this.i18nValues.set(prefix, { value: content, filePath: filePath });
         }
     }
 }

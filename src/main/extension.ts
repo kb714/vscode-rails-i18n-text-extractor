@@ -31,12 +31,20 @@ export function activate(context: vscode.ExtensionContext) {
     const provider = new I18nInformationProvider(yamlManager, context);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider('i18nInformationWebView', provider));
 
-    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => provider.updateWebview()));
-    context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => {
-        if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
-            provider.updateWebview();
-        }
-    }));
+	context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
+		if (editor && (editor.document.languageId === 'ruby' || editor.document.fileName.endsWith('.erb'))) {
+			provider.updateWebview();
+		}
+	}));
+	
+	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(event => {
+		const activeEditor = vscode.window.activeTextEditor;
+		if (activeEditor && event.document === activeEditor.document && 
+			(activeEditor.document.languageId === 'ruby' || activeEditor.document.fileName.endsWith('.erb'))) {
+			provider.updateWebview();
+		}
+	}));
+
 	let refreshCmd = vscode.commands.registerCommand('i18nInformation.refresh', () => {
 		provider.yamlManager.refresh();
 		provider.updateWebview();

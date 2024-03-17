@@ -30,11 +30,37 @@ export default class YamlFiles {
         if (!workspaceFolders) return;
     
         for (const folder of workspaceFolders) {
-            const localesPath = path.join(folder.uri.fsPath, 'config', 'locales');
-            await this.parseDirectory(localesPath);
+            await this.searchForLocalesDirectory(folder.uri.fsPath);
         }
         this.isLoaded = true;
     }
+    
+    private async searchForLocalesDirectory(dirPath: string) {
+        // esto es super lento ...
+        try {
+            const uri = vscode.Uri.file(dirPath);
+            const entries = await vscode.workspace.fs.readDirectory(uri);
+            const searchPromises = [];
+    
+            for (const [entryName, entryType] of entries) {
+                const fullPath = path.join(dirPath, entryName);
+                if (entryType === vscode.FileType.Directory) {
+                    // esto hay que dejarlo configurado, puede
+                    // que no todos usen esta estructura
+                    if (fullPath.endsWith('config/locales')) {
+                        searchPromises.push(this.parseDirectory(fullPath));
+                    } else {
+                        searchPromises.push(this.searchForLocalesDirectory(fullPath));
+                    }
+                }
+            }
+    
+            // esperamos que todo se complete
+            await Promise.all(searchPromises);
+        } catch (e) {
+            console.error(`Error searching locales directory: ${dirPath}`, e);
+        }
+    }      
 
     public async waitForLoad(): Promise<void> {
         if (this.isLoaded) return Promise.resolve();
@@ -53,7 +79,9 @@ export default class YamlFiles {
             const uri = vscode.Uri.file(dirPath);
             const entries = await vscode.workspace.fs.readDirectory(uri);
             for (const [entryName, entryType] of entries) {
-                if (entryType === vscode.FileType.File && entryName.endsWith('es.yml')) {
+                // buscamos todos los que sean 'es' algo
+                // esto debería beber ed la configuración de "idioma base"
+                if (entryType === vscode.FileType.File && /^es.*\.yml$/.test(entryName)) {
                     await this.parseYamlFile(path.join(dirPath, entryName));
                 } else if (entryType === vscode.FileType.Directory) {
                     await this.parseDirectory(path.join(dirPath, entryName));
@@ -77,9 +105,9 @@ export default class YamlFiles {
 
     private async parseYamlContent(prefix: string, content: any, filePath: string): Promise<void> {
         if (typeof content === 'object' && content !== null) {
-            for (const [key, value] of Object.entries(content)) { // Cambio aquí
+            for (const [key, value] of Object.entries(content)) {
                 const newPrefix = prefix ? `${prefix}.${key}` : key;
-                await this.parseYamlContent(newPrefix, value, filePath); // Ahora espera correctamente
+                await this.parseYamlContent(newPrefix, value, filePath);
             }
         } else if (typeof content === 'string') {
             this.i18nValues.set(prefix, { value: content, filePath: filePath });

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as readline from 'readline';
+import HTML from '../utils/html';
 
 export default class I18nInformationProvider implements vscode.WebviewViewProvider {
 	constructor(public yamlManager: any, context: vscode.ExtensionContext) {
@@ -9,7 +10,7 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 	private _context: vscode.ExtensionContext;
 	private webviewView?: vscode.WebviewView;
 
-	public resolveWebviewView(webviewView: vscode.WebviewView, context: vscode.WebviewViewResolveContext, token: vscode.CancellationToken): void | Thenable<void> {
+	public resolveWebviewView(webviewView: vscode.WebviewView): void | Thenable<void> {
 		this.webviewView = webviewView;
 		webviewView.webview.options = { enableScripts: true };
 
@@ -20,7 +21,8 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 				const document = await vscode.workspace.openTextDocument(position.filePath);
 				const editor = await vscode.window.showTextDocument(document, { preview: false });
 				
-				const newPosition = new vscode.Position(position.line, position.character + 6); // Ajustar según necesidad
+				// el 6 es para dejar el mouse en la t de I18n.t
+				const newPosition = new vscode.Position(position.line, position.character + 6);
 				const newSelection = new vscode.Selection(newPosition, newPosition);
 				
 				editor.selection = newSelection;
@@ -72,7 +74,6 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 		while ((match = i18nRegex.exec(text)) !== null) {
 			if (match[1]) {
 				// Guardamos también la posición para hacer un goToDefinition
-				// quizás podríamos hacer algo mas, como ir a la definición del yml
 				const position = document.positionAt(match.index);
 				keysWithPosition.push({ key: match[1], position });
 			}
@@ -83,12 +84,24 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 
 	private async generateTableRows(keys: { key: string; position: vscode.Position }[], filePath: string): Promise<string> {
 		const rowsPromises = keys.map(async ({ key, position }) => {
-			const fullKey = "es.".concat(key);
-			const ymlData = await this.yamlManager.findDataFromKey(fullKey)
+			let fullKey;
+			let ymlData;
+			// deberíamos detectar las variantes del idioma base
+			const langKeys = ['es', 'es-co', 'es-pe', 'es-mx', 'es-br'];
+			for (let langKey of langKeys) {
+				fullKey = `${langKey}.`.concat(key);
+				ymlData = await this.yamlManager.findDataFromKey(fullKey);
+				if (ymlData) {
+					// salimos si encontramos un valor, podríamos tener un selector
+					// para setear la prioridad de busqueda
+					break;
+				}
+			}
+			
 			let value;
-			let goToYmlHTML;
+			let goToYmlHTML = "";
 			if(ymlData) {
-				value = this.escapeHtml(ymlData.value)
+				value = HTML.escape(ymlData.value)
 				const positionYml = JSON.stringify({ filePath: ymlData.filePath, fullKey: fullKey });
 				goToYmlHTML = `
 					<vscode-button appearance="icon" onclick="goToYml('${positionYml.replace(/"/g, '&quot;')}')">
@@ -155,19 +168,10 @@ export default class I18nInformationProvider implements vscode.WebviewViewProvid
 		</html>`;
 	}
 
-	private escapeHtml(value: string) {
-		return value
-		  .replace(/&/g, "&amp;")
-		  .replace(/</g, "&lt;")
-		  .replace(/>/g, "&gt;")
-		  .replace(/"/g, "&quot;")
-		  .replace(/'/g, "&#39;");
-	  }
-
 	  private async findLineOfKeyInYaml(filePath: string, keyPath: string): Promise<number> {
 		// Como no sabemos siempre como se identan las lineas, basicamente lo que hacemos
 		// es buscar la primera anidación y contar las lineas que hay entre
-		// ella, y la siguiente clave, esa distancia será la separación que define
+		// ella y la siguiente clave, esa distancia será la separación que define
 		// los espacios, acepto mejores soluciones <.<
         const fileStream = fs.createReadStream(filePath);
       

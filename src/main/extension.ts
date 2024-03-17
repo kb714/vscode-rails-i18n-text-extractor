@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import FileProcessorFactory from './fileProcessorFactory';
 import I18nInformationProvider from './ui/I18nInformationProvider';
+import ConfigurationWebview from './ui/configurationWebview';
 import YamlFiles from './ui/yamlFiles';
 
 export function activate(context: vscode.ExtensionContext) {
 	const yamlManager = new YamlFiles(context);
 
-	let disposable = vscode.commands.registerCommand('extension.extract', async () => {
+	context.subscriptions.push(vscode.commands.registerCommand('extension.extract', async () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
 			// no sé en que casos puede pasar esto, pero otras extensiones hacen lo mismo
@@ -26,7 +27,12 @@ export function activate(context: vscode.ExtensionContext) {
 		} else {
 			vscode.window.showInformationMessage('File type not supported for extraction');
 		}
-	});
+	}));
+
+	context.subscriptions.push(vscode.commands.registerCommand('i18nInformation.configuration', () => {
+		const configurationWebview = new ConfigurationWebview(context);
+		configurationWebview.showConfiguration();
+	}));
 
     const provider = new I18nInformationProvider(yamlManager, context);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider('i18nInformationWebView', provider));
@@ -45,12 +51,10 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	}));
 
-	let refreshCmd = vscode.commands.registerCommand('i18nInformation.refresh', () => {
+	context.subscriptions.push(vscode.commands.registerCommand('i18nInformation.refresh', () => {
 		provider.yamlManager.refresh();
 		provider.updateWebview();
-	  });
-
-	context.subscriptions.push(disposable, refreshCmd);
+	  }));
 }
 
 export function deactivate() { }
